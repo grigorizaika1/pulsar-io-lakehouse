@@ -57,13 +57,13 @@ import org.apache.pulsar.ecosystem.io.lakehouse.sink.LakehouseWriter;
 public class DeltaWriter implements LakehouseWriter {
     protected static final String NAME = "metadata";
     protected static final String DESCRIPTION = "metadata change";
-    protected static final String COMMIT_INFO = "pulsar-sink-connector-version-2.9.1";
+    protected static final String COMMIT_INFO = "fathom-pulsar-sink-connector";
 
     private final DeltaSinkConnectorConfig config;
     private final String appId;
     private DeltaLog deltaLog;
     private Schema schema;
-    private DeltaParquetWriter writer;
+    private DeltaParquetWriter parquetWriter;
     private Random random;
 
     public DeltaWriter(SinkConnectorConfig cfg, Schema schema) {
@@ -72,25 +72,29 @@ public class DeltaWriter implements LakehouseWriter {
         this.schema = schema;
 
         Configuration configuration = Utils.getDefaultHadoopConf(config);
-        deltaLog = DeltaLog.forTable(configuration, config.tablePath);
-        random = new Random(42);
+
+        this.deltaLog = DeltaLog.forTable(configuration, config.tablePath);
+
+        this.random = new Random(42);
 
         if (!deltaLog.tableExists()) {
             createTable(schema, config.getPartitionColumns());
         }
 
         if (config.getPartitionColumns() != null && !config.getPartitionColumns().isEmpty()) {
-            writer = new PartitionedDeltaParquetFileWriter(configuration,
+            this.parquetWriter = new PartitionedDeltaParquetFileWriter(configuration,
                 config.tablePath, config.getPartitionColumns(), config.compression, schema);
         } else {
-            writer = new DeltaParquetFileWriter(configuration, config.tablePath, config.compression, schema);
+            this.parquetWriter = new DeltaParquetFileWriter(
+                configuration, config.tablePath, config.compression, schema
+            );
         }
     }
 
     @Override
     public void close() {
         try {
-            commitFiles(writer.closeAndFlush());
+            commitFiles(this.parquetWriter.closeAndFlush());
         } catch (IOException e) {
             log.error("Failed to close and commit parquet file into delta lake. ", e);
         }
@@ -98,13 +102,13 @@ public class DeltaWriter implements LakehouseWriter {
 
     @Override
     public void writeAvroRecord(GenericRecord record) throws IOException {
-        writer.writeToParquetFile(record);
+        this.parquetWriter.writeToParquetFile(record);
     }
 
     @Override
     public boolean flush() {
         try {
-            commitFiles(writer.closeAndFlush());
+            commitFiles(this.parquetWriter.closeAndFlush());
             return true;
         } catch (IOException e) {
             log.error("Failed to close and commit parquet file into delta lake. ", e);
@@ -136,8 +140,7 @@ public class DeltaWriter implements LakehouseWriter {
             return false;
         }
 
-        // close and flush current writer
-        commitFiles(writer.closeAndFlush());
+        commitFiles(this.parquetWriter.closeAndFlush());
 
         // update delta table schema
         int cnt = 0;
@@ -167,7 +170,7 @@ public class DeltaWriter implements LakehouseWriter {
             }
         }
 
-        writer.updateSchema(schema);
+        this.parquetWriter.updateSchema(schema);
         this.schema = schema;
         return true;
     }
@@ -180,15 +183,19 @@ public class DeltaWriter implements LakehouseWriter {
         OptimisticTransaction optimisticTransaction = deltaLog.startTransaction();
         SetTransaction setTransaction = new SetTransaction(appId, optimisticTransaction.txnVersion(appId) + 1,
             Optional.of(System.currentTimeMillis()));
-        List<Action> filesToCommit = new ArrayList<>();
+
+        List<Action> filesToCommit = new ArrayList<>(); // TODO: change this name
         filesToCommit.add(setTransaction);
 
         for (DeltaParquetWriter.FileStat fileStat : fileStats) {
             log.info("add filePath: {}, partitionValues: {}, fileSize: {}",
                 fileStat.getFilePath(), fileStat.getPartitionValues(), fileStat.getFileSize());
-            AddFile addFile = new AddFile(fileStat.getFilePath(), fileStat.getPartitionValues(), fileStat.getFileSize(),
-                System.currentTimeMillis(), true, "\"{}\"", null);
-            filesToCommit.add(addFile);
+
+            AddFile addFileAction = new AddFile(
+                fileStat.getFilePath(), fileStat.getPartitionValues(), fileStat.getFileSize(),
+                System.currentTimeMillis(), true, null, null
+            );
+            filesToCommit.add(addFileAction);
         }
 
         log.info("Add parquet files: {}", filesToCommit);

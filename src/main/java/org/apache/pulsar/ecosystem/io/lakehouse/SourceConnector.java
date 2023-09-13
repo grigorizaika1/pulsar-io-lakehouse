@@ -78,7 +78,7 @@ public class SourceConnector implements Source<GenericRecord> {
 
     // metrics
     private final AtomicInteger processingException = new AtomicInteger(0);
-    private long recordCnt = 0;
+    private long recordCount = 0;
     private static long checkpointId = 0;
 
 

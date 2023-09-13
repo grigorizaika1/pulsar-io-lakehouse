@@ -120,6 +120,8 @@ public class SchemaConverter {
         return (StructType) field.getDataType();
     }
 
+    // NOTE: what does this do? what is a "null schema"?
+    // is can't assume a null ptr because is uses the getFields() method on the 'schema' object
     public static Schema convertPulsarAvroSchemaToNonNullSchema(Schema schema) {
         List<Schema.Field> newFields = new ArrayList<>();
         schema.getFields().forEach(f->{
