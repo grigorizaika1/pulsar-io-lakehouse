@@ -38,6 +38,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.parquet.avro.AvroParquetWriter;
 import org.apache.parquet.hadoop.ParquetWriter;
+import org.apache.parquet.hadoop.metadata.BlockMetaData;
 import org.apache.parquet.hadoop.metadata.CompressionCodecName;
 import org.apache.parquet.hadoop.util.HadoopInputFile;
 
@@ -92,6 +93,20 @@ public class DeltaParquetFileWriter implements DeltaParquetWriter {
         Path path = new Path(fileFullPath);
         HadoopInputFile hadoopInputFile = HadoopInputFile.fromPath(path, configuration);
         return hadoopInputFile.getLength();
+    }
+
+    public int getCurrentFileRecordCount() {
+        if (isClosed.get()) {
+            return 0;
+        }
+
+        double totalRecordCount = writer.getFooter().getBlocks().stream()
+            .mapToDouble((BlockMetaData blockMetaData) -> {
+                return blockMetaData.getRowCount();
+            })
+            .sum();
+
+        return (int) totalRecordCount;
     }
 
     @Override

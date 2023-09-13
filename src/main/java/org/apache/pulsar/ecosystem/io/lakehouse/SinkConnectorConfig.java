@@ -53,9 +53,11 @@ public abstract class SinkConnectorConfig implements Serializable {
     public static final int DEFAULT_MAX_RECORDS_PER_COMMIT = 10_000_000;
     public static final int DEFAULT_MAX_COMMIT_FAILED_TIMES = 5;
 
-    public static final String HUDI = "hudi";
-    public static final String ICEBERG = "iceberg";
-    public static final String DELTA = "delta";
+    public class LakehouseType {
+        public static final String DELTA = "delta";
+        public static final String ICEBERG = "iceberg";
+        public static final String HUDI = "hudi";
+    }
 
     @Category
     protected static final String CATEGORY_SINK = "Sink";
@@ -103,6 +105,12 @@ public abstract class SinkConnectorConfig implements Serializable {
     )
     String overrideFieldName = "";
 
+    @FieldContext(
+        category = CATEGORY_SINK,
+        doc = "AVRO schema string in  JSON format as described in https://avro.apache.org/docs/1.11.1/specification/"
+    )
+    String schemaString = "";
+
     static SinkConnectorConfig load(Map<String, Object> map) throws IOException, IncorrectParameterException {
         properties.putAll(map);
         String type = (String) map.get("type");
@@ -113,13 +121,13 @@ public abstract class SinkConnectorConfig implements Serializable {
         }
 
         switch (type.toLowerCase(Locale.ROOT)) {
-            case ICEBERG:
+            case LakehouseType.ICEBERG:
                 return jsonMapper().readValue(new ObjectMapper().writeValueAsString(map),
                     IcebergSinkConnectorConfig.class);
-            case DELTA:
+            case LakehouseType.DELTA:
                 return jsonMapper().readValue(new ObjectMapper().writeValueAsString(map),
                     DeltaSinkConnectorConfig.class);
-            case HUDI:
+            case LakehouseType.HUDI:
                 return jsonMapper().readValue(new ObjectMapper().writeValueAsString(map),
                     DefaultSinkConnectorConfig.class);
             default:
@@ -134,9 +142,9 @@ public abstract class SinkConnectorConfig implements Serializable {
 
     public void validate() throws IllegalArgumentException {
         if (StringUtils.isBlank(type)
-            || (!HUDI.equals(type.toLowerCase(Locale.ROOT))
-                && !ICEBERG.equals(type.toLowerCase(Locale.ROOT))
-                && !DELTA.equals(type.toLowerCase(Locale.ROOT)))) {
+            || (!LakehouseType.HUDI.equals(type.toLowerCase(Locale.ROOT))
+                && !LakehouseType.ICEBERG.equals(type.toLowerCase(Locale.ROOT))
+                && !LakehouseType.DELTA.equals(type.toLowerCase(Locale.ROOT)))) {
             String error = "type must be set and must be one of hudi, iceberg or delta";
             log.error("{}", error);
             throw new IllegalArgumentException(error);
@@ -161,6 +169,10 @@ public abstract class SinkConnectorConfig implements Serializable {
                 maxRecordsPerCommit, DEFAULT_MAX_RECORDS_PER_COMMIT);
             maxRecordsPerCommit = DEFAULT_MAX_RECORDS_PER_COMMIT;
         }
+    }
+
+    public String getSchemaString() {
+        return schemaString;
     }
 
     public Properties getProperties() {

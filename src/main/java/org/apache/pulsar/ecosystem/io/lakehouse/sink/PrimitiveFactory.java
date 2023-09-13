@@ -33,6 +33,7 @@ public class PrimitiveFactory {
         PulsarObject object;
         switch (schemaType) {
             case BYTES:
+                // the nio heap buffer is not serializable
                 object = new PulsarObject<>(ByteBuffer.wrap((byte[]) value), Schema.create(Schema.Type.BYTES));
                 break;
             case STRING:

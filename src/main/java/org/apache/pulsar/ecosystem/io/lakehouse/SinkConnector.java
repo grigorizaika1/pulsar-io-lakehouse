@@ -29,11 +29,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.pulsar.client.api.SubscriptionType;
 import org.apache.pulsar.client.api.schema.GenericObject;
 import org.apache.pulsar.ecosystem.io.lakehouse.exception.LakehouseConnectorException;
-import org.apache.pulsar.ecosystem.io.lakehouse.sink.PulsarSinkRecord;
 import org.apache.pulsar.ecosystem.io.lakehouse.sink.SinkWriter;
 import org.apache.pulsar.functions.api.Record;
 import org.apache.pulsar.io.core.Sink;
 import org.apache.pulsar.io.core.SinkContext;
+
 
 /**
  * Sink Connector.
@@ -42,7 +42,7 @@ import org.apache.pulsar.io.core.SinkContext;
 @Data
 public class SinkConnector implements Sink<GenericObject> {
     private SinkConnectorConfig sinkConnectorConfig;
-    private LinkedBlockingQueue<PulsarSinkRecord> messages;
+    private LinkedBlockingQueue<Record<GenericObject>> messages;
     private ExecutorService executor;
     private SinkWriter writer;
 
@@ -63,10 +63,10 @@ public class SinkConnector implements Sink<GenericObject> {
         this.sinkConnectorConfig.validate();
         log.info("{} sink connector config: {}", this.sinkConnectorConfig.getType(), this.sinkConnectorConfig);
 
-        messages = new LinkedBlockingQueue<>(this.sinkConnectorConfig.getSinkConnectorQueueSize());
-        writer = new SinkWriter(sinkConnectorConfig, messages);
-        executor = Executors.newSingleThreadExecutor(new DefaultThreadFactory("lakehouse-io"));
-        executor.execute(writer);
+        this.messages = new LinkedBlockingQueue<>(this.sinkConnectorConfig.getSinkConnectorQueueSize());
+        this.writer = new SinkWriter(sinkConnectorConfig, messages);
+        this.executor = Executors.newSingleThreadExecutor(new DefaultThreadFactory("lakehouse-io"));
+        this.executor.execute(writer);
     }
 
     @Override
@@ -76,7 +76,8 @@ public class SinkConnector implements Sink<GenericObject> {
                 log.debug("Received message: {}", m.getMessageId());
             });
         }
-        while (!messages.offer(new PulsarSinkRecord(record), 1, TimeUnit.SECONDS)) {
+
+        while (!messages.offer(record, 1, TimeUnit.SECONDS)) {
             if (!writer.isRunning()) {
                 String err = "Exit caused by lakehouse writer stop working";
                 log.error("{}", err);
